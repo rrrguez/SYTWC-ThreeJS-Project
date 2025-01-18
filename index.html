@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale: 1.0">
+    <title>Three.js Kiosk Mode</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div class="scene-selector">
+      <div class="image-container">
+        <img class="scene-image" src="./images/kanto.jpg" alt="Kanto" onclick="loadScene(1)">
+        <p> Kanto </p>
+      </div>
+      <div class="image-container">
+        <img class="scene-image" src="./images/johto.jpg" alt="Johto" onclick="loadScene(2)">
+        <p> Johto </p>
+      </div>
+      <div class="image-container">
+        <img class="scene-image" src="./images/unova.jpg" alt="Unova" onclick="loadScene(4)">
+        <p> Unova </p>
+      </div>
+    </div>
+
+    <div id="infoPanel">
+        <h3>Información del Objeto</h3>
+        <p id="objectInfo">Selecciona un objeto para ver sus detalles.</p>
+        <button id="downloadButton" disabled>Descargar modelo</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.0/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/exporters/GLTFExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate/umd/index.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+        const walls = [];
+        const objects = [];
+        let selectedObject = null;
+
+        // Crear la escena del laboratorio Pokémon
+        function createLaboratoryScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xeeeeee);
+            scene.position.y = -2; // Mueve toda la escena hacia abajo
+
+
+            // Crear la cámara
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(5, 5, 10);
+
+            // Crear el renderizador
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Controles de órbita
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            // Crear paredes del laboratorio
+            const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+            const wallGeometry = new THREE.BoxGeometry(20, 15, 1); // Pared delgada
+            const floorGeometry = new THREE.PlaneGeometry(20, 20);
+
+            // Pared frontal
+            const frontWall = new THREE.Mesh(wallGeometry, wallMaterial);
+            frontWall.position.set(0, 5, -10);
+            walls.push(frontWall);
+            scene.add(frontWall);
+
+            // Pared trasera
+            const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
+            backWall.position.set(0, 5, 10);
+            walls.push(backWall);
+            scene.add(backWall);
+
+            // Pared izquierda
+            const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
+            leftWall.rotation.y = Math.PI / 2;
+            leftWall.position.set(-10, 5, 0);
+            walls.push(leftWall);
+            scene.add(leftWall);
+
+            // Pared derecha
+            const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
+            rightWall.rotation.y = -Math.PI / 2;
+            rightWall.position.set(10, 5, 0);
+            walls.push(rightWall);
+            scene.add(rightWall);
+
+            // Suelo
+            const textureLoader = new THREE.TextureLoader();
+            const floorTexture = textureLoader.load('./images/kanto_floor.jpg'); // Reemplaza con la ruta de tu imagen
+
+            const floorMaterial = new THREE.MeshStandardMaterial({ map: floorTexture });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0, 0);
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Iluminación
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 5);
+            light.castShadow = true;
+            scene.add(light);
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            // Restringir el movimiento de la cámara dentro de las paredes
+            controls.maxDistance = 15; // Distancia máxima de la cámara
+            controls.minDistance = 2;  // Distancia mínima de la cámara
+        }
+
+        // Restringir el movimiento de la cámara para que no se salga de las paredes
+        // Restringir el movimiento de la cámara para que no se salga de las paredes ni debajo del suelo
+        function updateCameraConstraints() {
+          const position = camera.position;
+          const maxBoundary = 10; // límite de las paredes
+          const minBoundary = -10;
+
+          // Restricción para no moverse más allá de las paredes en los ejes X y Z
+          if (position.x > maxBoundary) position.x = maxBoundary;
+          if (position.x < minBoundary) position.x = minBoundary;
+          if (position.z > maxBoundary) position.z = maxBoundary;
+          if (position.z < minBoundary) position.z = minBoundary;
+
+          // Restricción para no colocar la cámara debajo del suelo (y = 0)
+          if (position.y < 0) position.y = 0;  // Asegura que no baje de 0 (suelo)
+
+          // Detener el rebote si está justo en el suelo
+          if (position.y === 0) {
+            controls.minPolarAngle = Math.PI / 2;  // Limita el ángulo polar de la cámara para que no se mueva hacia abajo
+          } else {
+            controls.minPolarAngle = 0;  // Permite rotar la cámara normalmente cuando no está en el suelo
+          }
+        }
+
+        const loader = new THREE.FBXLoader();
+
+        // Red load
+        loader.load(
+          './models/Red.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.0425, 0.0425, 0.0425); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(3.25, 0, 0); // Ajusta las coordenadas (x, y, z)
+
+            object.rotation.y = Math.PI; // Rotación de 90 grados en el eje X
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+              // Si el modelo contiene animaciones
+              if (object.animations && object.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(object);
+                  const action = mixer.clipAction(object.animations[0]); // Usa la primera animación
+                  action.play();
+
+                  // Añade el mixer al render loop
+                  mixers.push(mixer);
+              }
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+
+/**
+        // Lyra
+        loader.load(
+          './models/Lyra.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.0425, 0.0425, 0.0425); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(4.5, 0, 0); // Ajusta las coordenadas (x, y, z)
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+              // Si el modelo contiene animaciones
+              if (object.animations && object.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(object);
+                  const action = mixer.clipAction(object.animations[0]); // Usa la primera animación
+                  action.play();
+
+                  // Añade el mixer al render loop
+                  mixers.push(mixer);
+              }
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+
+        // Hilda
+        loader.load(
+          './models/Hilda.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.04, 0.04, 0.04); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(6.5, 0, 0); // Ajusta las coordenadas (x, y, z)
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+              // Si el modelo contiene animaciones
+              if (object.animations && object.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(object);
+                  const action = mixer.clipAction(object.animations[0]); // Usa la primera animación
+                  action.play();
+
+                  // Añade el mixer al render loop
+                  mixers.push(mixer);
+              }
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+        */
+
+        loader.load(
+          './models/Bulbasaur.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.025, 0.025, 0.025); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(0, 2.75, -6); // Ajusta las coordenadas (x, y, z)
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+              // Si el modelo contiene animaciones
+              if (object.animations && object.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(object);
+                  const action = mixer.clipAction(object.animations[0]); // Usa la primera animación
+                  action.play();
+
+                  // Añade el mixer al render loop
+                  mixers.push(mixer);
+              }
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+
+        loader.load(
+          './models/Squirtle.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.05, 0.05, 0.05); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(7.25, 2.75, -6); // Ajusta las coordenadas (x, y, z)
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+              // Si el modelo contiene animaciones
+              if (object.animations && object.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(object);
+                  const action = mixer.clipAction(object.animations[0]); // Usa la primera animación
+                  action.play();
+
+                  // Añade el mixer al render loop
+                  mixers.push(mixer);
+              }
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+
+        loader.load(
+          './models/Charmander.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.04, 0.04, 0.04); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(3.75, 2.75, -6);  // Ajusta las coordenadas (x, y, z)
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+              // Si el modelo contiene animaciones
+              if (object.animations && object.animations.length > 0) {
+                  const mixer = new THREE.AnimationMixer(object);
+                  const action = mixer.clipAction(object.animations[0]); // Usa la primera animación
+                  action.play();
+
+                  // Añade el mixer al render loop
+                  mixers.push(mixer);
+              }
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+
+        loader.load(
+          './models/desk.fbx', // Ruta del modelo FBX
+          (object) => {
+            // Ajusta el tamaño del modelo si es necesario
+            object.scale.set(0.00125, 0.00075, 0.001); // Cambia la escala según sea necesario
+
+            // Posiciona el modelo en la escena
+            object.position.set(4, 1.35, -4.5); // Ajusta las coordenadas (x, y, z)
+
+            object.traverse((child) => {
+              if (child.isMesh) {
+                const material = child.material;
+
+                // Asegura que la opacidad esté al 100%
+                material.transparent = false;
+                material.opacity = 1.0;
+                child.castShadow = true;
+              }
+            });
+
+              // Añade el modelo a la escena
+              scene.add(object);
+          },
+          (xhr) => {
+              // Progreso de carga (opcional)
+              console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+          },
+          (error) => {
+              // Manejo de errores
+              console.error('Error al cargar el modelo FBX', error);
+          }
+        );
+
+        const clock = new THREE.Clock();
+        const mixers = []; // Array para almacenar todos los mixers de animación
+
+        // Renderizar la escena
+        function animate() {
+            requestAnimationFrame(animate);
+            updateCameraConstraints();
+
+            const delta = clock.getDelta(); // Tiempo transcurrido desde el último frame
+
+            // Actualiza todos los mixers
+            mixers.forEach((mixer) => mixer.update(delta));
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Cargar la escena seleccionada
+        function loadScene(sceneIndex) {
+            // Limpiar la escena actual
+            scene.clear();
+
+            // Crear una nueva escena según el índice
+            createLaboratoryScene();
+
+            // Iniciar la animación
+            animate();
+        }
+
+        // Inicialización
+        createLaboratoryScene();
+        animate();
+    </script>
+</body>
+</html>

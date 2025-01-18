@@ -1,0 +1,62 @@
+body { margin: 0; overflow: hidden; }
+
+.scene-selector {
+    position: absolute;
+    top: 10px;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    height: 100% - 10px;
+    width: 175px;
+    display: grid;
+    grid-template-rows: 1fr 1fr 1fr;
+    align-items: center;
+    justify-items: center;
+}
+
+.image-container {
+  position: relative;
+  display: inline-block;
+  width: 95%;
+}
+
+.scene-image {
+    width: 100%;
+    cursor: pointer;
+    border-width: 10px;
+    border-color: #D30000;
+    border-radius: 5px;
+}
+
+.image-container::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.image-container p {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -125%);
+  color: white;
+  font-size: 28px;
+  font-weight: normal;
+}
+
+#infoPanel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
