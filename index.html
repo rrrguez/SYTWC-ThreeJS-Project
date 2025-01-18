@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Educational App</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #infoPanel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        #infoPanel button { margin-top: 10px; display: block; }
+    </style>
+</head>
+<body>
+    <div id="infoPanel">
+        <h3>Información del Objeto</h3>
+        <p id="objectInfo">Selecciona un objeto para ver sus detalles.</p>
+        <button id="downloadButton" disabled>Descargar modelo</button>
+        <button id="newSceneButton">Nueva escena</button>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.152.0/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/exporters/GLTFExporter.js"></script>
+    <script>
+        // Configuración básica de Three.js
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xeeeeee);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 10);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Controles de órbita
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+        // Suelo que recibe sombras
+        const planeGeometry = new THREE.PlaneGeometry(20, 20);
+        const planeMaterial = new THREE.ShadowMaterial({ opacity: 0.5 });
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2;
+        plane.receiveShadow = true;
+        scene.add(plane);
+
+        // Luz direccional con sombras
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 10, 5);
+        light.castShadow = true;
+        light.shadow.mapSize.width = 1024;
+        light.shadow.mapSize.height = 1024;
+        scene.add(light);
+
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        // Objetos aleatorios
+        const objects = [];
+        function createRandomObjects() {
+          const maxAttempts = 50; // Máximo de intentos para encontrar una posición válida
+          const minDistance = 1.5; // Distancia mínima permitida entre objetos
+
+          for (let i = 0; i < 5; i++) {
+            let validPosition = false;
+            let attempts = 0;
+
+            while (!validPosition && attempts < maxAttempts) {
+              attempts++;
+
+              // Generar una posición aleatoria
+              const x = (Math.random() - 0.5) * 10;
+              const z = (Math.random() - 0.5) * 10;
+
+              // Comprobar si hay suficiente distancia con los objetos existentes
+              validPosition = objects.every(obj => {
+                const dx = obj.position.x - x;
+                const dz = obj.position.z - z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                return distance >= minDistance;
+              });
+
+              const geometries = [
+                new THREE.BoxGeometry(),
+                new THREE.ConeGeometry(),
+                new THREE.CylinderGeometry()
+              ];
+
+              if (validPosition) {
+                // Crear el objeto si la posición es válida
+                const geometry = geometries[Math.floor(Math.random() * geometries.length)];
+                const material = new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff });
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(x, 0.5, z);
+                mesh.castShadow = true;
+                objects.push(mesh);
+                scene.add(mesh);
+              }
+            }
+
+            // Si no se encuentra una posición válida después de varios intentos, se omite este objeto.
+            if (attempts === maxAttempts) {
+              console.warn(`No se pudo colocar el objeto ${i + 1} después de ${maxAttempts} intentos.`);
+            }
+          }
+      }
+
+        createRandomObjects();
+
+        // Animación simple para un objeto
+        let animatedObject = objects[0];
+        function animateObject() {
+            if (animatedObject) {
+                animatedObject.rotation.x += 0.02;
+                animatedObject.rotation.y += 0.01;
+                animatedObject.rotation.z += 0.01;
+            }
+        }
+
+        // Raycaster para selección de objetos
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let selectedObject = null;
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects);
+
+            if (intersects.length > 0) {
+                selectedObject = intersects[0].object;
+                displayObjectInfo(selectedObject);
+            }
+        }
+
+        function displayObjectInfo(object) {
+            const infoPanel = document.getElementById('objectInfo');
+            infoPanel.innerText = `Nombre: ${object.geometry.type}\nColor: ${object.material.color.getHexString()}`;
+            document.getElementById('downloadButton').disabled = false;
+        }
+
+        // Descarga del modelo seleccionado
+        const exporter = new THREE.GLTFExporter();
+        document.getElementById('downloadButton').addEventListener('click', () => {
+            if (selectedObject) {
+                exporter.parse(selectedObject, (gltf) => {
+                    const blob = new Blob([JSON.stringify(gltf)], { type: 'application/json' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'model.glb';
+                    link.click();
+                });
+            }
+        });
+
+        // Generar una nueva escena
+        document.getElementById('newSceneButton').addEventListener('click', () => {
+            // Eliminar objetos existentes
+            objects.forEach(obj => scene.remove(obj));
+            objects.length = 0; // Limpia el array de objetos
+            selectedObject = null;
+
+            // Actualizar la interfaz de información
+            document.getElementById('objectInfo').innerText = "Selecciona un objeto para ver sus detalles.";
+            document.getElementById('downloadButton').disabled = true;
+
+            // Crear nuevos objetos
+            createRandomObjects();
+            animatedObject = objects[0]; // Reasignar objeto animado
+        });
+
+        // Animación y renderizado
+        function animate() {
+            requestAnimationFrame(animate);
+            animateObject();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Event listener para clics
+        window.addEventListener('click', onMouseClick);
+    </script>
+</body>
+</html>
+
+
