@@ -6,4 +6,10 @@ Se ha desarrollado una aplicación educativa donde se presentan al usuario escen
 
 El usuario puede descargar el modelo 3D de la figura seleccionada y generar nuevas escenas de forma dinámica.
 
+---
+
 <img width="1869" height="935" alt="image" src="https://github.com/user-attachments/assets/a709b1c1-d822-43c9-8b83-a6ee1c9f290b" />
+
+---
+
+<img width="1869" height="935" alt="image" src="https://github.com/user-attachments/assets/b9eca3a9-4045-4842-b508-fde87a43d342" />
